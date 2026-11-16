@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.DS_Store
+*.png
+# build products
+cpp/build/
+fortran/build/
+*.o
+*.mod
+julia/Manifest.toml
+dev/
