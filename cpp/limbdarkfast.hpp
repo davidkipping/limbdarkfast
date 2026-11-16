@@ -66,7 +66,7 @@ const double TWO_PI = 6.283185307179586;
 const double EPS = 2.220446049250313e-16;
 const double TINY = 1e-280;
 const double Y_SW = 1e-3;        // spherical pole: series half-width in y
-const double F_SW = 1e-10;       // below this flattening, the spherical forms
+const double F_SW = 1e-14;       // below this flattening, the spherical forms (error ~ 200 f)
 const double Z_TOL = 1e-4;       // |z| ~ 1: a candidate limb crossing
 const double G_TOL = 1e-12;      // accepted crossing residual, relative
 const double PAIR_TOL = 1e-6;    // crossings closer than this are a tangency
@@ -160,7 +160,8 @@ inline void sphere_occ(double z, double r, const LawData& L, double* occ) {
     z = std::fabs(z);
     for (int k = 0; k < 3 + L.K; ++k) occ[k] = 0.0;
     if (z >= 1.0 + r) return;
-    const double r2 = r * r, z2 = z * z, alpha = 1.0 - r2 - z2;
+    // r^2 - 1 is factored: z^2 is lost against it when r = 1 and z is small
+    const double r2 = r * r, z2 = z * z, rm1 = (r - 1.0) * (r + 1.0), alpha = -rm1 - z2;
     const double sqarea = kite_sqarea(z, r);
 
     if (z <= 1.0 - r) {                       // planet wholly on the disc
@@ -173,7 +174,7 @@ inline void sphere_occ(double z, double r, const LawData& L, double* occ) {
         occ[1] = -(0.5 * s0 + 0.25 * s2);
         occ[2] = -(s0 / 3.0 + s2 / 6.0 + s4 / 6.0);
         const double A = std::max((r + 1.0 - z) * (1.0 - r + z), TINY);
-        const double Bp = (1.0 - z - r) * (1.0 + z + r);
+        const double Bp = ((1.0 - std::max(z, r)) - std::min(z, r)) * (1.0 + z + r);
         for (int k = 0; k < L.K; ++k) {
             const double e = L.eps[k], p = 1.0 + e;
             const double K = p + r2 - z2;
@@ -187,11 +188,13 @@ inline void sphere_occ(double z, double r, const LawData& L, double* occ) {
     // and every term lands on its full-disc value)
     const bool tot = z <= r - 1.0;
     const double A = std::max((r + 1.0 - z) * (1.0 - r + z), TINY);  // 1-(z-r)^2
-    const double Bp = (1.0 - z - r) * (1.0 + z + r);                 // 1-(z+r)^2
-    const double kite = tot ? 0.0
-                            : std::sqrt(std::max(sqarea, (10.0 * EPS) * (10.0 * EPS)));
-    const double kap0 = std::atan2(kite, r2 + z2 - 1.0);   // angle at the planet
-    const double kap1 = std::atan2(kite, 1.0 + z2 - r2);   // angle at the star
+    // 1 - (z+r)^2, the larger of z and r taken from 1 first (exactly, when it
+    // is near 1), so that the smaller is not rounded against 1
+    const double Bp = ((1.0 - std::max(z, r)) - std::min(z, r)) * (1.0 + z + r);
+    // sqarea > 0 in the lens, to a few ulps; the floor only keeps kite^2 representable
+    const double kite = tot ? 0.0 : std::sqrt(std::max(sqarea, TINY));
+    const double kap0 = std::atan2(kite, rm1 + z2);        // angle at the planet
+    const double kap1 = std::atan2(kite, z2 - rm1);        // angle at the star
 
     const double s0 = -(kap1 + r2 * kap0 - 0.5 * kite);
     const double eta2 = r2 * (r2 + 2.0 * z2);
@@ -746,7 +749,8 @@ inline double intensity(double mu, const double* w, Law law) {
 // Normalised flux of a star with a hybrid law, occulted by a spherical
 // planet of radius r (stellar radii) at sky separation z. w points to the
 // law's n_weights(law) shape weights. Exact for r < 1; for a companion
-// larger than the star the even terms lose about r^5 x 1e-16.
+// larger than the star the even terms lose about r^5 x 1e-16 (tested to
+// r = 2; 2e-12 at r = 10, 2e-7 at r = 100).
 inline double hybrid_flux(double z, double r, const double* w, Law law) {
     if (!(r >= 0.0)) throw std::domain_error("limbdarkfast: need r >= 0");
     const detail::LawData& L = detail::law_data(law);

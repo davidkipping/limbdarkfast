@@ -22,7 +22,7 @@
 ; OUTPUT:
 ;   The normalised flux, one value per z (double precision). Exact for
 ;   r < 1; for a companion larger than the star the even terms lose about
-;   r^5 x 1e-16.
+;   r^5 x 1e-16 (tested to r = 2; 2e-12 at r = 10, 2e-7 at r = 100).
 ;
 ; EXAMPLE:
 ;   z = dindgen(1001) / 1000d * 1.2d

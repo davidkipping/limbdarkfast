@@ -65,7 +65,7 @@ module limbdarkfast
   real(dp), parameter :: PI = 3.141592653589793d0, TWO_PI = 6.283185307179586d0
   real(dp), parameter :: EPS = 2.220446049250313d-16, TINY = 1d-280
   real(dp), parameter :: Y_SW = 1d-3        ! spherical pole: series half-width in y
-  real(dp), parameter :: F_SW = 1d-10       ! below this flattening, the spherical forms
+  real(dp), parameter :: F_SW = 1d-14       ! below this flattening, the spherical forms (error ~ 200 f)
   real(dp), parameter :: Z_TOL = 1d-4       ! |z| ~ 1: a candidate limb crossing
   real(dp), parameter :: G_TOL = 1d-12      ! accepted crossing residual, relative
   real(dp), parameter :: PAIR_TOL = 1d-6    ! crossings closer than this are a tangency
@@ -208,7 +208,7 @@ contains
   !> Normalised flux of a star with a hybrid law, occulted by a spherical
   !> planet of radius r (stellar radii) at sky separation z. Exact for
   !> r < 1; for a companion larger than the star the even terms lose about
-  !> r^5 x 1e-16.
+  !> r^5 x 1e-16 (tested to r = 2; 2e-12 at r = 10, 2e-7 at r = 100).
   pure real(dp) function hybrid_flux_0(z, r, w, law) result(flux)
     real(dp), intent(in) :: z, r, w(:)
     integer, intent(in) :: law
@@ -317,7 +317,7 @@ contains
     real(dp), intent(in) :: zin, r
     type(law_t), intent(in) :: L
     real(dp), intent(out) :: occ(6)
-    real(dp) :: z, r2, z2, alpha, sqarea, s0, s2, s4, M0, M2, M4, A, Bp
+    real(dp) :: z, r2, z2, rm1, alpha, sqarea, s0, s2, s4, M0, M2, M4, A, Bp
     real(dp) :: kite, kap0, kap1, eta2, nBp, e, p, Kp, Q, sqQ, apb, U, ratio, y, y2, T, G, J
     logical :: tot
     integer :: k
@@ -327,10 +327,13 @@ contains
     if (z >= 1.0_dp + r) return
     r2 = r * r
     z2 = z * z
-    alpha = 1.0_dp - r2 - z2
+    rm1 = (r - 1.0_dp) * (r + 1.0_dp)   ! r^2 - 1, factored: z^2 is lost against it when r = 1, z small
+    alpha = -rm1 - z2
     sqarea = kite_sqarea(z, r)
     A = max((r + 1.0_dp - z) * (1.0_dp - r + z), TINY)   ! 1 - (z - r)^2
-    Bp = (1.0_dp - z - r) * (1.0_dp + z + r)              ! 1 - (z + r)^2
+    ! 1 - (z + r)^2, the larger of z and r taken from 1 first (exactly, when it
+    ! is near 1), so that the smaller is not rounded against 1
+    Bp = ((1.0_dp - max(z, r)) - min(z, r)) * (1.0_dp + z + r)
 
     if (z <= 1.0_dp - r) then                             ! wholly on the disc
       s0 = -PI * r2
@@ -358,10 +361,10 @@ contains
     if (tot) then
       kite = 0.0_dp
     else
-      kite = sqrt(max(sqarea, (10.0_dp * EPS)**2))
+      kite = sqrt(max(sqarea, TINY))   ! sqarea > 0 in the lens, to a few ulps
     end if
-    kap0 = atan2(kite, r2 + z2 - 1.0_dp)     ! half-angle at the planet
-    kap1 = atan2(kite, 1.0_dp + z2 - r2)     ! half-angle at the star
+    kap0 = atan2(kite, rm1 + z2)             ! half-angle at the planet
+    kap1 = atan2(kite, z2 - rm1)             ! half-angle at the star
 
     s0 = -(kap1 + r2 * kap0 - 0.5_dp * kite)
     eta2 = r2 * (r2 + 2.0_dp * z2)

@@ -81,7 +81,7 @@ function limbdarkfast_const
   compile_opt idl2, hidden
   return, {eps: 2.220446049250313d-16, tiny: 1d-280, $
            y_sw: 1d-3, $          ; spherical pole: series half-width in y
-           f_sw: 1d-10, $         ; below this flattening, the spherical forms
+           f_sw: 1d-14, $         ; below this flattening, the spherical forms (error ~ 200 f)
            z_tol: 1d-4, $         ; |z| ~ 1: a candidate limb crossing
            g_tol: 1d-12, $        ; accepted crossing residual, relative
            pair_tol: 1d-6, $      ; crossings closer than this are a tangency
@@ -189,10 +189,13 @@ function limbdarkfast_sphere_occ, z_in, r_in, L
   if nc gt 0 then begin
     zz = z[ic] & rr = r[ic]
     r2 = rr * rr & z2 = zz * zz
-    alpha = 1d - r2 - z2
+    rm1 = (rr - 1d) * (rr + 1d)    ; r^2 - 1, factored: z^2 is lost against it when r = 1, z small
+    alpha = -rm1 - z2
     sqarea = limbdarkfast_kite_sqarea(zz, rr)
     A = ((rr + 1d - zz) * (1d - rr + zz)) > C.tiny          ; 1 - (z - r)^2
-    Bp = (1d - zz - rr) * (1d + zz + rr)                    ; 1 - (z + r)^2
+    ; 1 - (z + r)^2, the larger of z and r taken from 1 first (exactly, when it
+    ; is near 1), so that the smaller is not rounded against 1
+    Bp = ((1d - (zz > rr)) - (zz < rr)) * (1d + zz + rr)
     s0 = -!dpi * r2
     s2 = 2d * !dpi * r2 * (r2 + 2d * z2 - 1d)
     M0 = !dpi
@@ -216,16 +219,17 @@ function limbdarkfast_sphere_occ, z_in, r_in, L
   if np gt 0 then begin
     zz = z[ip] & rr = r[ip]
     r2 = rr * rr & z2 = zz * zz
-    alpha = 1d - r2 - z2
+    rm1 = (rr - 1d) * (rr + 1d)    ; r^2 - 1, factored: z^2 is lost against it when r = 1, z small
+    alpha = -rm1 - z2
     sqarea = limbdarkfast_kite_sqarea(zz, rr)
     A = ((rr + 1d - zz) * (1d - rr + zz)) > C.tiny
-    Bp = (1d - zz - rr) * (1d + zz + rr)
+    Bp = ((1d - (zz > rr)) - (zz < rr)) * (1d + zz + rr)
     tot = zz le rr - 1d
-    kite = sqrt(sqarea > (10d * C.eps)^2)
+    kite = sqrt(sqarea > C.tiny)           ; sqarea > 0 in the lens, to a few ulps
     it = limbdarkfast_where(tot, nt)
     if nt gt 0 then kite[it] = 0d
-    kap0 = atan(kite, r2 + z2 - 1d)        ; half-angle at the planet
-    kap1 = atan(kite, 1d + z2 - r2)        ; half-angle at the star
+    kap0 = atan(kite, rm1 + z2)            ; half-angle at the planet
+    kap1 = atan(kite, z2 - rm1)            ; half-angle at the star
     s0 = -(kap1 + r2 * kap0 - 0.5d * kite)
     eta2 = r2 * (r2 + 2d * z2)
     s2 = 2d * s0 + 2d * (kap1 + eta2 * kap0 - 0.25d * kite * (1d + 5d * r2 + z2))

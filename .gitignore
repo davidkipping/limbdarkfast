@@ -9,3 +9,4 @@ fortran/build/
 *.mod
 julia/Manifest.toml
 dev/
+.claude/

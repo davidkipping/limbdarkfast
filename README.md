@@ -54,12 +54,13 @@ the same constants, generated from the Python one by
 
 | directory | contents | status |
 |---|---|---|
-| `python/` | `limbdarkfast.py` (NumPy), `test_limbdarkfast.py`, `example.py` | done: vectors at ≤ 2e-14 |
-| `cpp/` | header-only `limbdarkfast.hpp` (C++11), test, example, Makefile | done: vectors at ≤ 2e-14 |
-| `fortran/` | module `limbdarkfast.f90` (Fortran 2008), test, example, Makefile | done: vectors at ≤ 2e-14 |
-| `julia/` | package `LimbDarkFast` (`src/LimbDarkFast.jl`), `test/runtests.jl`, `examples/` | done: vectors at ≤ 6e-14 |
-| `idl/` | `limbdarkfast_hybrid_flux.pro`, `limbdarkfast_hybrid_flux_oblate.pro`, `limbdarkfast_intensity.pro`, `limbdarkfast_core.pro`, test, example | done in GDL: vectors at ≤ 2e-14 |
+| `python/` | `limbdarkfast.py` (NumPy), `test_limbdarkfast.py`, `example.py` | done |
+| `cpp/` | header-only `limbdarkfast.hpp` (C++11), test, example, Makefile | done |
+| `fortran/` | module `limbdarkfast.f90` (Fortran 2008), test, example, Makefile | done |
+| `julia/` | package `LimbDarkFast` (`src/LimbDarkFast.jl`), `test/runtests.jl`, `examples/` | done |
+| `idl/` | `limbdarkfast_hybrid_flux.pro`, `limbdarkfast_hybrid_flux_oblate.pro`, `limbdarkfast_intensity.pro`, `limbdarkfast_core.pro`, test, example | done (tested in GDL) |
 | `tests/` | `vectors/*.txt`, the shared reference fluxes | done |
+| `tools/` | `reference_fluxes.py` (writes the vectors; needs mpmath), `law_constants.py` (the laws' constants for each language) | done |
 
 ## Using each version
 
@@ -137,20 +138,40 @@ so the code uses finite sentinels.
 
 ## Validation
 
-`tests/vectors/` holds reference fluxes from an independent float64
-implementation of the same closed forms: for each law, 2,226 spherical points (every regime, and the contacts, the line
-z = r and each pole's switch line approached to 1e-13) and 5,049 oblate
-points (chords at flattenings from 0 to 0.7, the edge of the domain, the
-outline tangent to the limb and to every pole circle approached to 1e-13,
-and centred, nearly round planets). The oblate references agree with
-SquishierPlanet, a third implementation, to 2.4e-15. Every version must
-reproduce them to 1e-12.
+The tests mirror those of Agol, Luger & Foreman-Mackey (2020), and every
+version runs both kinds:
 
-The files are plain text: `#` header lines, then rows of
-`z r w… F` (spherical) or `X Y r f theta w… F` (oblate).
+1. **Reference fluxes from high-precision quadrature.** `tests/vectors/`
+   holds, for each law, 3,016 spherical and 5,541 oblate points whose
+   fluxes come from a direct numerical integral of the intensity over the
+   occulted part of the star, in 40-digit arithmetic (tanh-sinh quadrature
+   over annuli, split wherever the annulus touches the outline;
+   `tools/reference_fluxes.py`, which needs mpmath). They share nothing
+   with the closed forms but the laws' constants, and each is the
+   correctly rounded double of the true flux. The spherical points include
+   Agol et al.'s radii (0.01, 0.1, 0.5, 0.9999, 1, 1.0001, 2) with every
+   contact approached from 1e-3 to 1e-14, plus the line z = r and each
+   pole's switch line approached to 1e-13; the oblate points cover chords
+   at flattenings from 0 to 0.7 (including either side of f = 1e-14, below
+   which the planet is treated as its equal-area circle), the edge of the
+   domain, the outline tangent to the limb and to every pole circle
+   approached to 1e-13, and centred, nearly round planets. Every version must reproduce them to
+   1e-12; all do to 6e-15.
+2. **Brute-force integration** (their `test_transit_poly.jl`). In each
+   language, the intensity is summed over 5,000 annuli with the midpoint
+   rule, each annulus weighted by the angle it spends inside the planet
+   (for an ellipse, found by sampling and bisection). It is compared at
+   their table of (r, b), every contact included, at its oblate twin, and
+   along a light curve; the tolerance is 1e-6 (theirs was 1e-5), and the
+   largest difference is 4e-7, the same in every language.
+
+The vector files are plain text: `#` header lines, then rows of
+`z r w… F` (spherical) or `X Y r f theta w… F` (oblate), in three blocks,
+one per weight vector.
 
 Accuracy: rounding (≲ 1e-15) for planets. For a companion larger than the
-star the spherical even terms lose about r⁵ × 1e-16 (2e-14 at r = 3).
+star the spherical even terms lose about r⁵ × 1e-16, so the tests stop at
+r = 2 (3e-15); measured 2e-12 at r = 10 and 2e-7 at r = 100.
 
 ## Citation
 

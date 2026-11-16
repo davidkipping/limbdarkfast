@@ -52,7 +52,7 @@ const TWO_PI = 2π
 const EPS = eps(Float64)
 const TINY = 1e-280
 const Y_SW = 1e-3        # spherical pole: series half-width in y
-const F_SW = 1e-10       # below this flattening, the spherical forms
+const F_SW = 1e-14       # below this flattening, the spherical forms (error ~ 200 f)
 const Z_TOL = 1e-4       # |z| ~ 1: a candidate limb crossing
 const G_TOL = 1e-12      # accepted crossing residual, relative
 const PAIR_TOL = 1e-6    # crossings closer than this are a tangency
@@ -176,10 +176,13 @@ function sphere_occ(z::Float64, r::Float64, L::Law)
     z = abs(z)
     z >= 1.0 + r && return ntuple(_ -> 0.0, 6)
     r2, z2 = r * r, z * z
-    alpha = 1.0 - r2 - z2
+    rm1 = (r - 1.0) * (r + 1.0)    # r² - 1, factored: z² is lost against it when r = 1, z small
+    alpha = -rm1 - z2
     sqarea = kite_sqarea(z, r)
     A = max((r + 1.0 - z) * (1.0 - r + z), TINY)    # 1 - (z - r)²
-    Bp = (1.0 - z - r) * (1.0 + z + r)               # 1 - (z + r)²
+    # 1 - (z + r)², the larger of z and r taken from 1 first (exactly, when it
+    # is near 1), so that the smaller is not rounded against 1
+    Bp = ((1.0 - max(z, r)) - min(z, r)) * (1.0 + z + r)
 
     if z <= 1.0 - r                                 # wholly on the disc
         s0 = -π * r2
@@ -201,9 +204,10 @@ function sphere_occ(z::Float64, r::Float64, L::Law)
     # partial overlap (or, for r > 1, total occultation: kite = 0 there, and
     # every term lands on its full-disc value)
     tot = z <= r - 1.0
-    kite = tot ? 0.0 : sqrt(max(sqarea, (10.0 * EPS)^2))
-    kap0 = atan(kite, r2 + z2 - 1.0)    # half-angle at the planet
-    kap1 = atan(kite, 1.0 + z2 - r2)    # half-angle at the star
+    # sqarea > 0 in the lens, to a few ulps; the floor only keeps kite² representable
+    kite = tot ? 0.0 : sqrt(max(sqarea, TINY))
+    kap0 = atan(kite, rm1 + z2)         # half-angle at the planet
+    kap1 = atan(kite, z2 - rm1)         # half-angle at the star
     s0 = -(kap1 + r2 * kap0 - 0.5 * kite)
     eta2 = r2 * (r2 + 2.0 * z2)
     s2 = 2.0 * s0 + 2.0 * (kap1 + eta2 * kap0 - 0.25 * kite * (1.0 + 5.0 * r2 + z2))
@@ -669,7 +673,8 @@ Normalised flux of a star with a hybrid law, occulted by a spherical planet
 of radius `r` (stellar radii) at sky separation `z` (a number or an array).
 `w` are the law's shape weights; `law` is `:hybrid2`, `:hybrid4` or
 `:hybrid5` (or `HYBRID2`, ...). Exact for r < 1; for a companion larger than
-the star the even terms lose about r⁵ × 1e-16.
+the star the even terms lose about r⁵ × 1e-16 (tested to r = 2; 2e-12 at
+r = 10, 2e-7 at r = 100).
 """
 function hybrid_flux(z::Real, r::Real, w, law=HYBRID4)
     L = getlaw(law)

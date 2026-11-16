@@ -70,7 +70,7 @@ _TINY = 1e-280
 # spherical pole column: half-width in y of the series across Q = 0
 _Y_SW = 1e-3
 # oblate planet
-_F_SW = 1e-10          # below this flattening, the spherical forms
+_F_SW = 1e-14          # below this flattening, the spherical forms (error ~ 200 f)
 _Z_TOL = 1e-4          # |z| ~ 1: a candidate limb crossing
 _G_TOL = 1e-12         # accepted crossing residual, relative
 _PAIR_TOL = 1e-6       # crossings closer than this (rad) are a tangency
@@ -226,15 +226,20 @@ def _sphere_occ(z, r, eps):
         m_lens = m_part & ~m_tot
 
         A = np.maximum((r + 1.0 - z) * (1.0 - r + z), _TINY)   # 1 - (z-r)^2
-        Bp = (1.0 - z - r) * (1.0 + z + r)                      # 1 - (z+r)^2
+        # 1 - (z+r)^2, the larger of z and r taken from 1 first (exactly,
+        # when it is near 1), so that the smaller is not rounded against 1
+        Bp = ((1.0 - np.maximum(z, r)) - np.minimum(z, r)) * (1.0 + z + r)
         sqarea = _kite_sqarea(z, r)
-        kite = np.where(m_lens, np.sqrt(np.maximum(sqarea, (10 * _EPS) ** 2)),
-                        0.0)
-        kap0 = np.arctan2(kite, r2 + z2 - 1.0)   # half-angle at the planet
-        kap1 = np.arctan2(kite, 1.0 + z2 - r2)   # half-angle at the star
+        # sqarea > 0 inside the lens, to a few ulps (the floor only keeps
+        # kite^2 representable); r^2 - 1 is factored, as z^2 is lost against
+        # it when r = 1 and z is small
+        kite = np.where(m_lens, np.sqrt(np.maximum(sqarea, _TINY)), 0.0)
+        rm1 = (r - 1.0) * (r + 1.0)              # r^2 - 1
+        kap0 = np.arctan2(kite, rm1 + z2)        # half-angle at the planet
+        kap1 = np.arctan2(kite, z2 - rm1)        # half-angle at the star
 
         # ---- even terms: s0, s2 and the recursion M0, M2 -> M4 ----------
-        alpha = 1.0 - r2 - z2
+        alpha = -rm1 - z2                        # 1 - r^2 - z^2
         s0_part = -(kap1 + r2 * kap0 - 0.5 * kite)
         s0 = np.where(m_part, s0_part, np.where(m_comp, -_PI * r2, 0.0))
         eta2 = r2 * (r2 + 2.0 * z2)
@@ -295,7 +300,8 @@ def hybrid_flux(z, r, w, law="hybrid4"):
     z, r: scalars or arrays (broadcast); w: the law's shape weights
     (2, 4 or 5 of them); law: "hybrid2", "hybrid4" or "hybrid5".
     Exact for r < 1; for a companion larger than the star the even terms
-    lose about r^5 x 1e-16.
+    lose about r^5 x 1e-16 (tested to r = 2; 2e-12 at r = 10, 2e-7 at
+    r = 100).
     """
     law = get_law(law)
     w = _weights(w, law)
